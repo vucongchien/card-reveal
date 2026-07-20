@@ -1,26 +1,75 @@
+import { useState } from 'react'
 import giftCover from '@/assets/gift-card-cover.png'
-import { CardReveal } from '@/features/card-reveal'
+import { CardReveal, getTheme, type CardRevealTheme } from '@/features/card-reveal'
 
-/** Cream page + light botanical pattern (demo chrome only). */
-const CREAM = '#fffcf8'
-const PATTERN =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23d5dfd0' stroke-width='1.2'%3E%3Cpath d='M18 36c7-12 20-9 16 5-5 11-18 7-16-5z'/%3E%3Cpath d='M78 26c9-7 18 2 11 11-7 7-18 0-11-11z'/%3E%3Cpath d='M42 88c11-5 16 7 7 12-9 4-16-7-7-12z'/%3E%3Cpath d='M96 78c5-10 18-5 12 7-5 9-16 3-12-7z'/%3E%3Ccircle cx='36' cy='62' r='1.6' fill='%23d5dfd0' stroke='none'/%3E%3Ccircle cx='88' cy='48' r='1.3' fill='%23d5dfd0' stroke='none'/%3E%3Cpath d='M58 18c4-6 10-2 7 4'/%3E%3C/g%3E%3C/svg%3E\")"
+const THEME_OPTS: { id: CardRevealTheme; label: string }[] = [
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+]
 
 export default function App() {
+  const [theme, setTheme] = useState<CardRevealTheme>('light')
+  const palette = getTheme(theme)
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: CREAM }}>
+    <div style={{ position: 'fixed', inset: 0, background: palette.pageBg }}>
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          opacity: 0.45,
-          backgroundImage: PATTERN,
+          opacity: theme === 'light' ? 0.45 : 0,
+          backgroundImage: palette.pagePattern,
           backgroundSize: '120px 120px',
         }}
       />
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 20,
+          display: 'flex',
+          gap: 8,
+          padding: 6,
+          borderRadius: 999,
+          background: theme === 'light' ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(8px)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+        }}
+      >
+        {THEME_OPTS.map((t) => {
+          const active = theme === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTheme(t.id)}
+              style={{
+                border: 'none',
+                cursor: 'pointer',
+                padding: '8px 14px',
+                borderRadius: 999,
+                fontFamily: "'Be Vietnam Pro', system-ui, sans-serif",
+                fontSize: 13,
+                fontWeight: 600,
+                letterSpacing: 0.4,
+                color: active ? (theme === 'dark' ? '#0c0a0f' : '#fff') : palette.uiHintMuted,
+                background: active ? palette.uiDot : 'transparent',
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
       <CardReveal
+        key={theme}
+        theme={theme}
         voucher={{
           brand: 'Demo Café',
           title: 'Free drink voucher',

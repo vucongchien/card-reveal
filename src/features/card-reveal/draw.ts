@@ -1,16 +1,14 @@
-// Vẽ hiệu ứng card-reveal bằng Canvas 2D — bản v5, theme sáng (kem + coral/cam ấm).
+﻿// Vẽ hiệu ứng card-reveal bằng Canvas 2D — bản v5, theme sáng (kem + P.accent/cam ấm).
 // Mọi công thức toán giữ nguyên từ v2/v4; chỉ đổi palette và cách render (ctx.* thay vì <div>).
 // Toạ độ gốc 1080×1920; caller đã scale + dịch sẵn qua ctx.setTransform.
 import { Easing, clamp } from './scene-engine'
+import { applyTheme, P, type CardRevealTheme } from './themes'
 
 export const W = 1080,
   H = 1920,
   CX = 540,
   CY = 940
 
-// Theme sáng (tham chiếu v1): kem + coral/cam ấm
-const GOLD = '#f9a825' // --cr-orange
-const CORAL = '#f76c6c'
 const GLOW = 1 // TW.glow
 
 /** Font hỗ trợ tiếng Việt (tránh ô vuông khi dùng Cormorant/Avenir). */
@@ -57,6 +55,8 @@ export interface Cfg {
   clickToOpen: boolean
   /** Locale cho `brand.toLocaleUpperCase` — mặc định `'vi'`. */
   brandLocale: string
+  /** `light` (kem+coral) | `dark` (Black Gold từ export). */
+  theme: CardRevealTheme
 }
 
 /** [trái, phải] — null slot = không vẽ bên đó. */
@@ -123,19 +123,63 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.roundRect(x, y, w, h, r)
 }
 
-// ── Backdrop: để trong suốt → hiện nền page (Birthday cream + pattern) ───────
-function drawBackdrop(_ctx: CanvasRenderingContext2D, _time: number) {
-  // no-op — CSS page bg show through cleared canvas
+// ── Backdrop: light = trong suốt; dark = Black Gold (gradient + aura xoay + sao) ─
+function drawBackdrop(ctx: CanvasRenderingContext2D, time: number) {
+  if (!P.canvasBackdrop) return
+  ctx.save()
+  const bg = ctx.createLinearGradient(W * 0.08, 0, W * 0.2, H)
+  bg.addColorStop(0, P.backdrop0)
+  bg.addColorStop(0.4, P.backdrop1)
+  bg.addColorStop(0.78, P.backdrop2)
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, W, H)
+
+  // Quầng vàng elip xoay chậm — khớp export Backdrop radial + rotate
+  if (P.backdropAura > 0.01) {
+    ctx.save()
+    ctx.translate(CX - W * 0.1, H * 0.35)
+    ctx.rotate(((8 + Math.sin(time * 0.3) * 2) * Math.PI) / 180)
+    const a = P.backdropAura
+    const aura = ctx.createRadialGradient(0, 0, 20, 0, 0, W * 0.55)
+    aura.addColorStop(0, `rgba(${P.goldRgb},${a * 0.4})`)
+    aura.addColorStop(0.45, `rgba(${P.goldRgb},${a * 0.13})`)
+    aura.addColorStop(0.7, `rgba(${P.goldRgb},0)`)
+    ctx.fillStyle = aura
+    ctx.beginPath()
+    ctx.ellipse(0, 0, W * 0.55, H * 0.42, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+
+  // Sao nhấp nháy (export: 34 dots)
+  for (let i = 0; i < 34; i++) {
+    const o = 0.15 + 0.5 * Math.abs(Math.sin(time * 1.8 + R(i) * 6.28))
+    const s = 3 + R(i, 3) * 4
+    ctx.globalAlpha = o
+    ctx.fillStyle = R(i, 4) > 0.6 ? P.gold : '#ffffff'
+    ctx.beginPath()
+    ctx.arc(R(i, 1) * W, R(i, 2) * H, s / 2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
+
+  const vig = ctx.createRadialGradient(CX, H * 0.46, W * 0.2, CX, H * 0.46, W * 0.85)
+  vig.addColorStop(0, 'rgba(0,0,0,0)')
+  vig.addColorStop(0.55, 'rgba(0,0,0,0)')
+  vig.addColorStop(1, P.vignette)
+  ctx.fillStyle = vig
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
 }
 
 /** Bóng oval dưới cụm thẻ — neo thẻ khỏi nền phẳng. */
 function drawCardGroundShadow(ctx: CanvasRenderingContext2D, o = 1) {
   if (o <= 0.01) return
   ctx.save()
-  ctx.globalAlpha = 0.22 * o
+  ctx.globalAlpha = (P.canvasBackdrop ? 0.55 : 0.22) * o
   const g = ctx.createRadialGradient(CX, CY + 290, 10, CX, CY + 290, 280)
-  g.addColorStop(0, 'rgba(60,40,55,0.45)')
-  g.addColorStop(1, 'rgba(60,40,55,0)')
+  g.addColorStop(0, P.groundShadow)
+  g.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = g
   ctx.beginPath()
   ctx.ellipse(CX, CY + 290, 260, 48, 0, 0, Math.PI * 2)
@@ -150,9 +194,9 @@ function drawMoon(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.translate(x, y)
   // vẽ đĩa tròn rồi khoét crescent bằng destination-out
   const grad = ctx.createLinearGradient(0, -s / 2, 0, s / 2)
-  grad.addColorStop(0, '#fff8f0')
-  grad.addColorStop(1, '#ffd5ce')
-  ctx.shadowColor = 'rgba(240,238,228,0.45)'
+  grad.addColorStop(0, P.moon0)
+  grad.addColorStop(1, P.moon1)
+  ctx.shadowColor = P.moonShadow
   ctx.shadowBlur = 14
   ctx.fillStyle = grad
   ctx.beginPath()
@@ -172,7 +216,7 @@ function drawRays(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.save()
   ctx.translate(x, y)
   ctx.globalAlpha = o
-  ctx.fillStyle = bright ? 'rgba(255,200,150,0.28)' : 'rgba(255,180,160,0.12)'
+  ctx.fillStyle = bright ? P.raysBright : P.raysSoft
   const rad = Math.hypot(w, h)
   for (let deg = 0; deg < 360; deg += 14) {
     const a0 = (deg * Math.PI) / 180,
@@ -193,15 +237,15 @@ function drawOrnament(ctx: CanvasRenderingContext2D, cx: number, topY: number, w
   const left = cx - ow / 2
   ctx.save()
   // 2 lá (ellipse)
-  ctx.fillStyle = '#f0a830'
+  ctx.fillStyle = P.ornament
   ctx.beginPath()
   ctx.ellipse(left + ow * 0.21, topY + oh * 0.47, ow * 0.21, oh * 0.19, -0.42, 0, Math.PI * 2)
   ctx.ellipse(left + ow * 0.79, topY + oh * 0.47, ow * 0.21, oh * 0.19, 0.42, 0, Math.PI * 2)
   ctx.fill()
   // viên kim cương giữa
   const dg = ctx.createLinearGradient(0, topY, 0, topY + oh * 0.85)
-  dg.addColorStop(0, '#fff0c0')
-  dg.addColorStop(1, '#f9a825')
+  dg.addColorStop(0, P.ornamentGem0)
+  dg.addColorStop(1, P.ornamentGem1)
   ctx.fillStyle = dg
   ctx.beginPath()
   ctx.moveTo(cx, topY)
@@ -240,32 +284,32 @@ function drawVoucherFace(
   ctx.globalAlpha = 1
 
   ctx.font = `700 ${valueSize}px ${FONT_SANS}`
-  ctx.fillStyle = CORAL
+  ctx.fillStyle = P.accent
   ctx.fillText(v.value, cx, y)
   y += 61.2 * s
 
   ctx.font = `500 ${titleSize}px ${FONT_SANS}`
-  ctx.fillStyle = '#5c5668'
+  ctx.fillStyle = P.title
   ctx.fillText(v.title, cx, y)
   y += 39.2 * s
 
   ctx.font = `600 ${brandSize}px ${FONT_SANS}`
-  ctx.fillStyle = '#9a8f9c'
+  ctx.fillStyle = P.brand
   ctx.fillText(v.brand.toLocaleUpperCase(brandLocale || 'vi'), cx, y)
   y += 31.5 * s
 
   const codeW = Math.min(w * 0.8, Math.max(w * 0.48, v.code.length * codeSize * 0.62 + 41.4 * s))
   const codeX = cx - codeW / 2
   const codeRad = 9.2 * s
-  ctx.fillStyle = 'rgba(247,108,108,0.08)'
+  ctx.fillStyle = P.codeBg
   roundRectPath(ctx, codeX, y, codeW, codeH, codeRad)
   ctx.fill()
   ctx.lineWidth = Math.max(1, 1.8 * s)
-  ctx.strokeStyle = 'rgba(247,108,108,0.35)'
+  ctx.strokeStyle = P.codeStroke
   roundRectPath(ctx, codeX, y, codeW, codeH, codeRad)
   ctx.stroke()
   ctx.font = `600 ${codeSize}px ${FONT_CODE}`
-  ctx.fillStyle = '#4a4455'
+  ctx.fillStyle = P.code
   ctx.textBaseline = 'middle'
   ctx.fillText(v.code, cx, y + codeH * 0.5)
   y += codeH + 7 * s
@@ -273,7 +317,7 @@ function drawVoucherFace(
   if (v.expiry) {
     ctx.textBaseline = 'top'
     ctx.font = `500 ${expSize}px ${FONT_SANS}`
-    ctx.fillStyle = '#b0a6ae'
+    ctx.fillStyle = P.expiry
     ctx.fillText(v.expiry, cx, y)
   }
 
@@ -286,7 +330,7 @@ function drawCardText(ctx: CanvasRenderingContext2D, lines: string[], cx: number
   const sizes = [w * 0.105, w * 0.068, w * 0.05]
   const lineHeights = [1.15, 1.2, 1.3]
   const gap = w * 0.02
-  const colors = [CORAL, '#6e6880', CORAL]
+  const colors = [P.accent, P.textMid, P.accent]
   const fonts = [
     `600 ${sizes[0]}px ${FONT_SANS}`,
     `italic 500 ${sizes[1]}px ${FONT_SANS}`,
@@ -313,7 +357,7 @@ function drawCardText(ctx: CanvasRenderingContext2D, lines: string[], cx: number
     ctx.globalAlpha = idx === 2 ? 0.75 : 1
     ctx.fillStyle = colors[idx]
     if (idx === 0) {
-      ctx.shadowColor = CORAL + '66'
+      ctx.shadowColor = P.accent + '66'
       ctx.shadowBlur = 24
     } else ctx.shadowBlur = 0
     ctx.fillText(line, cx, y)
@@ -376,6 +420,7 @@ function paintLayer(
 function faceLayerKey(cfg: Cfg, assets: Assets) {
   const v = cfg.voucher
   return [
+    cfg.theme,
     cfg.image,
     cfg.text?.join('\n') ?? '',
     v ? `${v.brand}|${v.title}|${v.value}|${v.code}|${v.expiry ?? ''}` : '',
@@ -386,11 +431,11 @@ function faceLayerKey(cfg: Cfg, assets: Assets) {
 function fanLayerKey(cfg: Cfg, assets: Assets, index: number, item: FanItem | null) {
   if (item == null) return '∅'
   const body = typeof item === 'string' ? item : item.text.join('\n')
-  return `${body}§${assets.fan[index] ? '1' : '0'}§${cfg.back ?? ''}`
+  return `${cfg.theme}§${body}§${assets.fan[index] ? '1' : '0'}§${cfg.back ?? ''}`
 }
 
 function backLayerKey(cfg: Cfg, assets: Assets) {
-  return `${cfg.back ?? ''}§${assets.back ? '1' : '0'}`
+  return `${cfg.theme}§${cfg.back ?? ''}§${assets.back ? '1' : '0'}`
 }
 
 /** Ép GPU upload bitmap — lần blit đầu tiên trên main canvas dễ khựng 1 frame. */
@@ -461,6 +506,7 @@ function ensureCardLayers(cfg: Cfg, assets: Assets) {
  * face+2 fan đúng frame bung thẻ (gây khựng ~1 nhịp).
  */
 export function warmRevealStep(cfg: Cfg, assets: Assets): boolean {
+  applyTheme(cfg.theme)
   ensureBackLayer(cfg, assets)
   const fk = faceLayerKey(cfg, assets)
   if (fk !== faceCacheKey || !faceLayer) {
@@ -496,6 +542,7 @@ export function revealLayersReady(cfg: Cfg, assets: Assets): boolean {
  * Vẫn paint back sync ngay (scene chờ mở cần).
  */
 export function prewarmCardLayers(cfg: Cfg, assets: Assets) {
+  applyTheme(cfg.theme)
   ensureBackLayer(cfg, assets)
   // Trải face/fan sang idle frames — đừng dồn 3 paint liền (khựng idle / tranh charge)
   requestAnimationFrame(() => {
@@ -602,6 +649,7 @@ export function drawCardBack(
   cover: string | { text: string[] } | null,
   coverImg: HTMLImageElement | null,
 ) {
+  applyTheme(cfg.theme)
   const h = w * 1.55
   const coverTxt = cover && typeof cover === 'object' && 'text' in cover ? cover.text : null
   const imgEl = face ? null : coverTxt ? null : coverImg ?? assets.back
@@ -617,35 +665,35 @@ export function drawCardBack(
 
   // shadow + glow của thẻ
   ctx.save()
-  ctx.shadowColor = `rgba(240,210,125,${glow * 0.55})`
+  ctx.shadowColor = `rgba(${P.glowRgb},${glow * 0.55})`
   // Cap blur — shadowBlur cao mỗi frame (3 thẻ) ăn FPS mạnh
   ctx.shadowBlur = glow > 0.01 ? Math.min(22, glow * 32) : 0
   const bg = ctx.createLinearGradient(0, 0, 0, h)
   if (face) {
-    bg.addColorStop(0, '#ffffff')
-    bg.addColorStop(1, '#fff8f2')
+    bg.addColorStop(0, P.faceTop)
+    bg.addColorStop(1, P.faceBot)
   } else {
-    bg.addColorStop(0, '#fffdfb')
-    bg.addColorStop(1, '#fff5ee')
+    bg.addColorStop(0, P.backTop)
+    bg.addColorStop(1, P.backBot)
   }
   ctx.fillStyle = bg
   roundRectPath(ctx, 0, 0, w, h, rad)
   ctx.fill()
   ctx.restore()
 
-  // viền ngoài — ảnh: khung trắng dày kiểu v0 (.cr-face); còn lại: coral mỏng
+  // viền ngoài — ảnh: khung trắng dày kiểu v0 (.cr-face); còn lại: P.accent mỏng
   if (isPhoto) {
     ctx.lineWidth = Math.max(4, w * 0.028)
     ctx.strokeStyle = 'rgba(255,255,255,0.95)'
     roundRectPath(ctx, 0, 0, w, h, rad)
     ctx.stroke()
     ctx.lineWidth = Math.max(2, w * 0.01)
-    ctx.strokeStyle = CORAL + '99'
+    ctx.strokeStyle = P.accent + '99'
     roundRectPath(ctx, 0, 0, w, h, rad)
     ctx.stroke()
   } else {
     ctx.lineWidth = Math.max(2, w * 0.008)
-    ctx.strokeStyle = face ? CORAL + 'cc' : '#f0cfc8'
+    ctx.strokeStyle = face ? P.accent + 'cc' : P.borderSoft
     roundRectPath(ctx, 0, 0, w, h, rad)
     ctx.stroke()
   }
@@ -655,8 +703,8 @@ export function drawCardBack(
     ctx.save()
     ctx.globalAlpha = Math.min(1, glow)
     ctx.lineWidth = Math.max(2, w * 0.012)
-    ctx.strokeStyle = 'rgba(255,236,180,0.95)'
-    ctx.shadowColor = `rgba(240,210,125,${Math.min(0.7, glow)})`
+    ctx.strokeStyle = `rgba(${P.glowRgb},0.95)`
+    ctx.shadowColor = `rgba(${P.glowRgb},${Math.min(0.7, glow)})`
     ctx.shadowBlur = Math.min(28, glow * 36)
     roundRectPath(ctx, 0, 0, w, h, rad)
     ctx.stroke()
@@ -674,7 +722,7 @@ export function drawCardBack(
     const imgRad = Math.max(4, w * 0.04)
     const pw = w - pad * 2
     const ph = h - pad * 2
-    ctx.fillStyle = '#fff8f2'
+    ctx.fillStyle = P.photoPad
     roundRectPath(ctx, pad, pad, pw, ph, imgRad)
     ctx.fill()
     const iw0 = imgEl.naturalWidth || imgEl.width || 1
@@ -700,16 +748,16 @@ export function drawCardBack(
   } else {
     // viền trong
     ctx.lineWidth = 1
-    ctx.strokeStyle = face ? CORAL + '88' : 'rgba(247,108,108,0.22)'
+    ctx.strokeStyle = face ? P.accent + '88' : P.innerBorderSoft
     roundRectPath(ctx, w * 0.032, h * 0.032, w * 0.936, h * 0.936, w * 0.035)
     ctx.stroke()
 
     if (face) {
       const fg = ctx.createRadialGradient(w * 0.5, h * 0.46, 0, w * 0.5, h * 0.46, w * 0.5)
-      fg.addColorStop(0, 'rgba(255,250,238,0.85)')
-      fg.addColorStop(0.48, 'rgba(255,240,205,0.5)')
-      fg.addColorStop(0.7, GOLD + '22')
-      fg.addColorStop(0.82, GOLD + '00')
+      fg.addColorStop(0, P.faceGlow0)
+      fg.addColorStop(0.48, P.faceGlow1)
+      fg.addColorStop(0.7, P.gold + '22')
+      fg.addColorStop(0.82, P.gold + '00')
       ctx.fillStyle = fg
       ctx.fillRect(0, 0, w, h)
     }
@@ -738,7 +786,7 @@ export function drawCardBack(
     // Twinkles trong thẻ — bỏ khi voucher (đắt + che chữ)
     if (!voucher) {
       for (let i = 0; i < 6; i++) {
-        star(ctx, w * (0.2 + R(i, 7) * 0.6), h * (0.18 + R(i, 8) * 0.6), w * 0.03 + R(i, 9) * w * 0.02, 0.7, face ? GOLD : '#e8e4d8')
+        star(ctx, w * (0.2 + R(i, 7) * 0.6), h * (0.18 + R(i, 8) * 0.6), w * 0.03 + R(i, 9) * w * 0.02, 0.7, face ? P.gold : P.starMuted)
       }
     }
   }
@@ -750,12 +798,12 @@ export function drawCardBack(
   if (!imgEl && !voucher) {
     for (const [px, py] of [[7, 7], [7, 93], [93, 7], [93, 93]]) {
       const dr = w * 0.0275
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = P.cornerDot
       ctx.beginPath()
       ctx.arc((px / 100) * w, (py / 100) * h, dr, 0, Math.PI * 2)
       ctx.fill()
       ctx.lineWidth = 2
-      ctx.strokeStyle = CORAL + '55'
+      ctx.strokeStyle = P.accent + '55'
       ctx.stroke()
     }
   }
@@ -772,7 +820,7 @@ function drawRibbon(ctx: CanvasRenderingContext2D, sx: number, o: number) {
   ctx.scale(sx, 1)
   ctx.translate(-360, 0)
   // 2 đuôi
-  ctx.fillStyle = '#ffc4ba'
+  ctx.fillStyle = P.ribbon
   for (const [rx, sk, ro] of [
     [-20, 16, -4],
     [720 - 140 + 20, -16, 4],
@@ -787,13 +835,13 @@ function drawRibbon(ctx: CanvasRenderingContext2D, sx: number, o: number) {
   }
   // thân — cao hơn một chút để ghim đáy 3 thẻ
   const bg = ctx.createLinearGradient(0, 0, 0, 132)
-  bg.addColorStop(0, '#ffd9d2')
-  bg.addColorStop(0.8, '#ffc4ba')
+  bg.addColorStop(0, P.ribbonGrad0)
+  bg.addColorStop(0.8, P.ribbonGrad1)
   ctx.fillStyle = bg
   roundRectPath(ctx, 46, 0, 720 - 92, 132, 18)
   ctx.fill()
   ctx.lineWidth = 1
-  ctx.strokeStyle = 'rgba(247,108,108,0.28)'
+  ctx.strokeStyle = P.ribbonStroke
   ctx.stroke()
   ctx.restore()
 }
@@ -805,7 +853,11 @@ function drawHalo(ctx: CanvasRenderingContext2D, scale: number, o: number) {
   ctx.translate(CX, CY)
   ctx.scale(scale, scale)
   ctx.lineWidth = 3
-  ctx.strokeStyle = 'rgba(249,168,37,0.7)'
+  ctx.strokeStyle = P.haloStroke
+  if (P.canvasBackdrop) {
+    ctx.shadowColor = `rgba(${P.glowRgb},0.35)`
+    ctx.shadowBlur = 40
+  }
   ctx.beginPath()
   ctx.arc(0, 0, 330, 0, Math.PI * 2)
   ctx.stroke()
@@ -834,7 +886,7 @@ function drawSoftGoldAura(
   if (strength <= 0.02) return
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
-  // halo — cam/coral để nổi trên nền kem (vàng nhạt dễ mất)
+  // halo — cam/P.accent để nổi trên nền kem (vàng nhạt dễ mất)
   const cx = x + w / 2,
     cy = y + h / 2
   const R0 = Math.hypot(w, h) * 0.32
@@ -844,20 +896,20 @@ function drawSoftGoldAura(
     const g = ctx.createRadialGradient(cx, cy, rr * 0.15, cx, cy, rr)
     const a = strength * (0.32 - t * 0.06)
     g.addColorStop(0, `rgba(255,210,120,${a})`)
-    g.addColorStop(0.4, `rgba(247,108,108,${a * 0.55})`)
-    g.addColorStop(0.75, `rgba(249,168,37,${a * 0.35})`)
-    g.addColorStop(1, 'rgba(249,168,37,0)')
+    g.addColorStop(0.4, `rgba(${P.accentRgb},${a * 0.55})`)
+    g.addColorStop(0.75, `rgba(${P.goldRgb},${a * 0.35})`)
+    g.addColorStop(1, `rgba(${P.goldRgb},0)`)
     ctx.fillStyle = g
     ctx.beginPath()
     ctx.arc(cx, cy, rr, 0, Math.PI * 2)
     ctx.fill()
   }
-  // viền thẻ — coral đậm hơn vàng kem
+  // viền thẻ — P.accent đậm hơn vàng kem
   for (let i = 2; i >= 0; i--) {
     const pad = 4 + i * 7
     ctx.globalAlpha = strength * (0.48 - i * 0.1)
     ctx.lineWidth = 2.5 + i * 3.5
-    ctx.strokeStyle = i === 0 ? 'rgba(255,220,160,0.95)' : 'rgba(247,108,108,0.7)'
+    ctx.strokeStyle = i === 0 ? `rgba(${P.glowRgb},0.95)` : `rgba(${P.accentRgb},0.7)`
     roundRectPath(ctx, x - pad / 2, y - pad / 2, w + pad, h + pad, rad + pad * 0.3)
     ctx.stroke()
   }
@@ -924,8 +976,8 @@ function drawRevealed(
   if (glowA > 0.02) {
     const ggrad = ctx.createRadialGradient(CX, CY, 0, CX, CY, 400)
     ggrad.addColorStop(0, `rgba(255,240,200,${glowA})`)
-    ggrad.addColorStop(0.42, GOLD + ax(Math.min(1, (30 * glowK * GLOW) / 255)))
-    ggrad.addColorStop(0.66, GOLD + '00')
+    ggrad.addColorStop(0.42, P.gold + ax(Math.min(1, (30 * glowK * GLOW) / 255)))
+    ggrad.addColorStop(0.66, P.gold + '00')
     ctx.fillStyle = ggrad
     ctx.beginPath()
     ctx.arc(CX, CY, 400, 0, Math.PI * 2)
@@ -987,7 +1039,7 @@ function drawRevealed(
   const nTw = whiteHot > 0.01 ? 12 : 6
   for (let i = 0; i < nTw; i++) {
     const tw = twinkleAmp * Math.max(0, Math.sin(time * 2.6 + R(i, 5) * 6.28)) * 0.9
-    star(ctx, CX + (R(i, 1) - 0.5) * 760, CY + (R(i, 2) - 0.55) * 900, 12 + R(i, 3) * 26, tw, R(i, 4) > 0.5 ? GOLD : '#fff', R(i) * 90)
+    star(ctx, CX + (R(i, 1) - 0.5) * 760, CY + (R(i, 2) - 0.55) * 900, 12 + R(i, 3) * 26, tw, R(i, 4) > 0.5 ? P.gold : '#fff', R(i) * 90)
   }
 }
 
@@ -1039,13 +1091,13 @@ function sceneIdle(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt: 
   for (let i = 0; i < 10; i++) {
     const k = (lt * (0.05 + R(i) * 0.06) + R(i, 1)) % 1
     const s = 4 + R(i, 3) * 5
-    dot(ctx, R(i, 2) * W + Math.sin(lt + i) * 14, H - k * H, s / 2, amp * (0.2 + 0.5 * Math.abs(Math.sin(lt * 2.4 + i))) * (1 - k), GOLD)
+    dot(ctx, R(i, 2) * W + Math.sin(lt + i) * 14, H - k * H, s / 2, amp * (0.2 + 0.5 * Math.abs(Math.sin(lt * 2.4 + i))) * (1 - k), P.gold)
   }
   // glow đáy
   const pulse = (0.3 + 0.14 * Math.sin(lt * 2.2)) * amp * GLOW
   const bglow = ctx.createRadialGradient(CX, CY + 390, 0, CX, CY + 390, 380)
-  bglow.addColorStop(0, GOLD + ax((80 * pulse) / 255))
-  bglow.addColorStop(0.7, GOLD + '00')
+  bglow.addColorStop(0, P.gold + ax((80 * pulse) / 255))
+  bglow.addColorStop(0.7, P.gold + '00')
   ctx.fillStyle = bglow
   ctx.fillRect(CX - 380, CY + 180, 760, 420)
 
@@ -1081,7 +1133,7 @@ function sceneCharge(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt
 
   drawBackdrop(ctx, lt + 3)
 
-  // rings coral — nổi trên nền kem
+  // rings P.accent — nổi trên nền kem
   for (let i = 0; i < 2; i++) {
     const k = 1 - clamp(pA * 1.3 - i * 0.15, 0, 1)
     const s = 420 + k * 500
@@ -1090,7 +1142,7 @@ function sceneCharge(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt
       ctx.save()
       ctx.globalAlpha = o
       ctx.lineWidth = 3.5
-      ctx.strokeStyle = i === 0 ? 'rgba(247,108,108,0.85)' : 'rgba(249,168,37,0.9)'
+      ctx.strokeStyle = i === 0 ? `rgba(${P.accentRgb},0.85)` : `rgba(${P.goldRgb},0.9)`
       ctx.beginPath()
       ctx.arc(CX, CY - 40, s / 2, 0, Math.PI * 2)
       ctx.stroke()
@@ -1103,20 +1155,20 @@ function sceneCharge(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt
     const a = R(i, 1) * 6.283,
       d = (400 + R(i, 2) * 300) * (1 - Easing.easeInQuad(k))
     const o = 0.95 * Math.sin(clamp(k, 0, 1) * Math.PI)
-    const col = R(i, 5) > 0.55 ? CORAL : R(i, 5) > 0.25 ? GOLD : '#fff'
+    const col = R(i, 5) > 0.55 ? P.accent : R(i, 5) > 0.25 ? P.gold : '#fff'
     dot(ctx, CX + Math.cos(a) * d, CY - 40 + Math.sin(a) * d * 1.1, (6 + R(i, 3) * 8) / 2, o, col)
   }
   // glow đáy cam ấm
   const bglow = ctx.createRadialGradient(CX, CY + 390, 0, CX, CY + 390, 380)
-  bglow.addColorStop(0, `rgba(247,108,108,${0.22 * (0.35 + 0.65 * pA) * GLOW})`)
-  bglow.addColorStop(0.45, GOLD + ax((90 * (0.3 + 0.6 * pA) * GLOW) / 255))
-  bglow.addColorStop(0.75, GOLD + '00')
+  bglow.addColorStop(0, `rgba(${P.accentRgb},${0.22 * (0.35 + 0.65 * pA) * GLOW})`)
+  bglow.addColorStop(0.45, P.gold + ax((90 * (0.3 + 0.6 * pA) * GLOW) / 255))
+  bglow.addColorStop(0.75, P.gold + '00')
   ctx.fillStyle = bglow
   ctx.fillRect(CX - 380, CY + 180, 760, 420)
 
   drawCardGroundShadow(ctx, 0.55 + 0.9 * pA)
 
-  // thẻ xoay — blit cache + quầng coral/cam (nổi trên nền kem)
+  // thẻ xoay — blit cache + quầng P.accent/cam (nổi trên nền kem)
   const opacityCard = 1 - ss(0.94, 1, p)
   if (opacityCard > 0.005) {
     ctx.save()
@@ -1146,7 +1198,7 @@ function sceneCharge(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt
       const sg = ctx.createLinearGradient(-180, 0, 180, 0)
       sg.addColorStop(0.25, 'rgba(255,200,140,0)')
       sg.addColorStop(0.5, `rgba(255,230,180,${streakA})`)
-      sg.addColorStop(0.75, 'rgba(247,108,108,0)')
+      sg.addColorStop(0.75, `rgba(${P.accentRgb},0)`)
       ctx.fillStyle = sg
       ctx.fillRect(-MAIN_HALF, -MAIN_H_HALF, MAIN_W, MAIN_H)
       ctx.restore()
@@ -1255,8 +1307,8 @@ function sceneBurst(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt:
       ctx.rotate((R(i, 9) * 360 * Math.PI) / 180)
       const sg = ctx.createLinearGradient(0, 0, 0, len)
       sg.addColorStop(0, 'rgba(255,248,220,0.95)')
-      sg.addColorStop(0.6, GOLD + '55')
-      sg.addColorStop(1, GOLD + '00')
+      sg.addColorStop(0.6, P.gold + '55')
+      sg.addColorStop(1, P.gold + '00')
       ctx.fillStyle = sg
       roundRectPath(ctx, -2.5, 0, 5, len, 2.5)
       ctx.fill()
@@ -1268,12 +1320,12 @@ function sceneBurst(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt:
     const a = R(i) * 6.283,
       d = (140 + R(i, 1) * 460) * Easing.easeOutCubic(clamp(p * 1.5, 0, 1))
     const o = ss(0.02, 0.08 + R(i, 3) * 0.1, p) * (1 - ss(0.5 + R(i, 4) * 0.35, 0.98, p))
-    star(ctx, CX + Math.cos(a) * d, CY - 40 + Math.sin(a) * d * 1.15, 9 + R(i, 2) * 30, o, R(i, 5) > 0.45 ? GOLD : '#fff', R(i) * 360 + p * 140)
+    star(ctx, CX + Math.cos(a) * d, CY - 40 + Math.sin(a) * d * 1.15, 9 + R(i, 2) * 30, o, R(i, 5) > 0.45 ? P.gold : '#fff', R(i) * 360 + p * 140)
   }
   // fount — 14→8
   for (let i = 0; i < 8; i++) {
     const k = clamp(p * 1.3 - R(i) * 0.3, 0, 1)
-    dot(ctx, CX + (R(i, 1) - 0.5) * 500, CY + 240 - k * (300 + R(i, 2) * 380), (5 + R(i, 3) * 6) / 2, k > 0 ? (1 - k) * 0.85 : 0, GOLD)
+    dot(ctx, CX + (R(i, 1) - 0.5) * 500, CY + 240 - k * (300 + R(i, 2) * 380), (5 + R(i, 3) * 6) / 2, k > 0 ? (1 - k) * 0.85 : 0, P.gold)
   }
   // shockwave ring
   if ((1 - shockK) * 0.85 > 0.005) {
@@ -1343,7 +1395,7 @@ function sceneAfter(ctx: CanvasRenderingContext2D, cfg: Cfg, assets: Assets, lt:
   drawBackdrop(ctx, lt + 7)
   for (let i = 0; i < 8; i++) {
     const k = (lt * (0.05 + R(i) * 0.05) + R(i, 1)) % 1
-    dot(ctx, R(i, 2) * W, H - k * H, (4 + R(i, 3) * 4) / 2, amp * 0.5 * (1 - k) * Math.abs(Math.sin(lt * 2 + i)), GOLD)
+    dot(ctx, R(i, 2) * W, H - k * H, (4 + R(i, 3) * 4) / 2, amp * 0.5 * (1 - k) * Math.abs(Math.sin(lt * 2 + i)), P.gold)
   }
   drawRevealed(ctx, cfg, assets, { spread: 1, whiteHot: 0, glowK, rot, bob, shimmerK: amp > 0.5 ? shimmerK : -1, time: lt, twinkleAmp: amp })
 }
@@ -1357,6 +1409,7 @@ export function drawScene(
   assets: Assets,
   soloAfter: boolean,
 ) {
+  applyTheme(cfg.theme)
   ctx.clearRect(0, 0, W, H)
   if (name === 'Chờ mở') sceneIdle(ctx, cfg, assets, s.localTime, s.progress)
   else if (name === 'Chuẩn bị mở') sceneCharge(ctx, cfg, assets, s.localTime, s.progress)

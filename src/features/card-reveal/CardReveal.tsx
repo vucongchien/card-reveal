@@ -20,6 +20,7 @@ import {
   type RevealHit,
   type VoucherInfo,
 } from './draw'
+import { getTheme, type CardRevealTheme } from './themes'
 import mascot from './assets/mascot.png'
 import './fonts.css'
 
@@ -50,6 +51,8 @@ export interface CardRevealProps {
   clickToOpen?: boolean
   /** Locale for brand uppercase on the voucher face. Default `'vi'`. */
   brandLocale?: string
+  /** `light` (kem+coral) | `dark` (Black Gold). */
+  theme?: CardRevealTheme
   /** Override on-screen copy (tap hint, zoom hints). */
   labels?: CardRevealLabels
   /** Fires when the user starts the open sequence (or when auto-open begins). */
@@ -77,6 +80,7 @@ const DEFAULTS: Cfg = {
   bladeGlow: '#f9a825',
   clickToOpen: true,
   brandLocale: 'vi',
+  theme: 'light',
 }
 
 const SCENES_LOOP: Scene[] = [
@@ -158,6 +162,7 @@ function CardZoomModal({
   const justSwipedRef = useRef(false)
   const canSwipe = slides.length > 1
   const slide = slides[index] ?? slides[0]
+  const ui = getTheme(cfg.theme)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -215,7 +220,7 @@ function CardZoomModal({
         position: 'absolute',
         inset: 0,
         zIndex: 50,
-        background: 'rgba(255,252,248,0.92)',
+        background: ui.uiZoomBg,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -232,7 +237,7 @@ function CardZoomModal({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         style={{
-          boxShadow: '0 24px 64px rgba(247,108,108,0.28)',
+          boxShadow: ui.uiZoomShadow,
           cursor: canSwipe ? 'grab' : 'default',
           touchAction: 'none',
           userSelect: 'none',
@@ -257,7 +262,7 @@ function CardZoomModal({
                 borderRadius: 99,
                 border: 'none',
                 padding: 0,
-                background: i === index ? '#f76c6c' : 'rgba(184,169,160,0.55)',
+                background: i === index ? ui.uiDot : ui.uiDotMuted,
                 cursor: 'pointer',
                 transition: 'width 0.2s ease, background 0.2s ease',
               }}
@@ -271,7 +276,7 @@ function CardZoomModal({
           fontFamily: FONT_SANS,
           fontStyle: 'italic',
           fontSize: 15,
-          color: '#b8a9a0',
+          color: ui.uiHintMuted,
           letterSpacing: 1,
           textAlign: 'center',
           pointerEvents: 'none',
@@ -284,8 +289,16 @@ function CardZoomModal({
 }
 
 export function CardReveal(props: CardRevealProps = {}) {
-  const { labels: labelsProp, onOpen, onComplete, ...cfgProps } = props
-  const cfg: Cfg = { ...DEFAULTS, ...cfgProps }
+  const { labels: labelsProp, onOpen, onComplete, theme: themeProp, blade, bladeGlow, ...cfgProps } = props
+  const theme = themeProp ?? 'light'
+  const palette = getTheme(theme)
+  const cfg: Cfg = {
+    ...DEFAULTS,
+    ...cfgProps,
+    theme,
+    blade: blade ?? palette.blade,
+    bladeGlow: bladeGlow ?? palette.bladeGlow,
+  }
   const labels: Required<CardRevealLabels> = { ...DEFAULT_LABELS, ...labelsProp }
   const interactive = cfg.clickToOpen
   const [phase, setPhase] = useState<'wait' | 'open' | 'done'>('wait')
@@ -329,7 +342,7 @@ export function CardReveal(props: CardRevealProps = {}) {
     return () => {
       alive = false
     }
-  }, [cfg.image, cfg.back, cfg.fan, cfg.voucher, cfg.text])
+  }, [cfg.image, cfg.back, cfg.fan, cfg.voucher, cfg.text, cfg.theme])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -450,7 +463,7 @@ export function CardReveal(props: CardRevealProps = {}) {
             fontFamily: FONT_SANS,
             fontSize: 'clamp(17px, 4.5vw, 28px)',
             fontStyle: 'italic',
-            color: '#f76c6c',
+            color: palette.uiHint,
             letterSpacing: 2,
             pointerEvents: 'none',
             animation: 'crv5-pulse 1.8s ease-in-out infinite',

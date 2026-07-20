@@ -1,9 +1,10 @@
 /**
- * Canvas card-reveal animation (cream + coral).
+ * Canvas card-reveal animation.
  *
  * @example
  * ```tsx
  * <CardReveal
+ *   theme="dark"
  *   voucher={{
  *     brand: 'Demo Café',
  *     title: 'Free drink',
@@ -23,4 +24,5 @@
 export { CardReveal, CardRevealV5 } from './CardReveal'
 export type { CardRevealProps, CardRevealV5Props, CardRevealLabels } from './CardReveal'
 export type { FanSlots, VoucherInfo } from './draw'
+export { getTheme, THEMES, type CardRevealTheme, type ThemePalette } from './themes'
 export { FpsMeter } from './FpsMeter'
