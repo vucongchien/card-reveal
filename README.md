@@ -31,7 +31,7 @@ Canvas 2D card/voucher open animation for React. One `requestAnimationFrame` pai
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173 (or next free port)
+npm run dev      # http://localhost:5173 
 npm run build
 npm test
 ```
