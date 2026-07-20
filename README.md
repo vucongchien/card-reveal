@@ -1,5 +1,10 @@
 <p align="center">
-  <img src="docs/preview-light-open.png" alt="Card Reveal — Light theme opened" width="320" />
+  <img
+    src="docs/preview-light-open.png"
+    alt="Card Reveal — Light theme opened on mobile"
+    width="320"
+    style="max-width: 100%; height: auto;"
+  />
 </p>
 
 <h1 align="center">Card Reveal</h1>
